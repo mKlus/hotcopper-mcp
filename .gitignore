@@ -1,0 +1,9 @@
+node_modules/
+auth/*
+!auth/.gitkeep
+captures/
+*.har
+.DS_Store
+.env
+.env.*
+*.log

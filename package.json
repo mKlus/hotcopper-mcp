@@ -1,0 +1,42 @@
+{
+  "name": "hotcopper-mcp",
+  "version": "0.1.0",
+  "description": "Unofficial HotCopper MCP — reverse-engineered session + forum tools",
+  "type": "module",
+  "main": "src/server.js",
+  "bin": {
+    "hotcopper-mcp": "src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mKlus/hotcopper-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mKlus/hotcopper-mcp/issues"
+  },
+  "homepage": "https://github.com/mKlus/hotcopper-mcp#readme",
+  "scripts": {
+    "capture": "node scripts/capture-session.mjs",
+    "capture:chrome": "node scripts/capture-session.mjs --system-chrome",
+    "analyze": "node scripts/analyze-capture.mjs",
+    "smoke": "node scripts/smoke-test.mjs",
+    "start": "node src/server.js"
+  },
+  "keywords": [
+    "mcp",
+    "hotcopper",
+    "asx",
+    "model-context-protocol"
+  ],
+  "author": "mKlus",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "cheerio": "^1.2.0",
+    "playwright": "^1.61.1",
+    "zod": "^4.4.3"
+  }
+}
