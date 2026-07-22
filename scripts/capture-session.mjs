@@ -291,11 +291,24 @@ async function main() {
       response_preview = await bodyPreview(response);
     }
 
+    // Never persist Cookie / Authorization request headers (session leak risk)
+    const safeReqHeaders = { ...(meta.request_headers || {}) };
+    for (const k of Object.keys(safeReqHeaders)) {
+      if (/^(cookie|authorization|proxy-authorization)$/i.test(k)) {
+        safeReqHeaders[k] = "[redacted]";
+      }
+    }
     const entry = {
       ...meta,
+      request_headers: safeReqHeaders,
       status: response.status(),
       content_type: ct || null,
-      response_headers: response.headers(),
+      // Response headers only — omit set-cookie bodies from JSONL
+      response_headers: Object.fromEntries(
+        Object.entries(response.headers()).filter(
+          ([k]) => !/^set-cookie$/i.test(k)
+        )
+      ),
       response_preview,
     };
 

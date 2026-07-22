@@ -5,7 +5,7 @@ import {
   authInfo,
   getHtml,
   hcFetch,
-  absoluteUrl,
+  resolveHotCopperUrl,
   BASE,
 } from "./client.js";
 import {
@@ -44,23 +44,28 @@ export async function stockThreads(ticker, { limit = 30 } = {}) {
 }
 
 export async function getThread(threadRef, { limit = 40, page } = {}) {
-  let path = String(threadRef).trim();
-  if (/^\d+$/.test(path)) {
-    // bare id — need slug; try common pattern fails. Require full url/slug.
+  const raw = String(threadRef).trim();
+  if (/^\d+$/.test(raw)) {
     throw new Error(
       "Pass a full thread URL or path like /threads/subject.12345/ (not bare id alone)"
     );
   }
-  if (path.startsWith("http")) {
-    path = path.replace(BASE, "");
+  let absolute = resolveHotCopperUrl(raw);
+  if (page != null && !/\/page-\d+/.test(absolute)) {
+    const u = new URL(absolute);
+    u.pathname = u.pathname.replace(/\/?$/, `/page-${page}`);
+    absolute = u.toString();
   }
-  if (!path.startsWith("/")) path = `/${path}`;
-  // normalize
-  if (page && !/\/page-\d+/.test(path)) {
-    path = path.replace(/\/?$/, `/page-${page}`);
-  }
-  const res = await getHtml(path);
+  const res = await getHtml(absolute);
   const parsed = parseThread(res.text, { limit });
+  // Never return live CSRF tokens to the model/logs
+  if (parsed.reply) {
+    parsed.reply = {
+      can_reply: parsed.reply.can_reply,
+      thread_id: parsed.reply.thread_id,
+      // omit xfToken / attachment_hash from tool output
+    };
+  }
   return {
     url: res.url,
     ...parsed,
@@ -133,16 +138,14 @@ export async function replyToThread({
     return { ok: false, error: "thread_url and message are required" };
   }
 
-  let path = thread_url;
-  if (path.startsWith("http")) path = path.replace(BASE, "");
-  if (!path.startsWith("/")) path = `/${path}`;
-
-  const page = await getHtml(path);
+  const absolute = resolveHotCopperUrl(thread_url);
+  const page = await getHtml(absolute);
   const parsed = parseThread(page.text, { limit: 1 });
   if (!parsed.reply?.can_reply || !parsed.reply.action) {
     return {
       ok: false,
-      error: "Reply form not found — not logged in, thread locked, or layout changed",
+      error:
+        "Reply form not found — not logged in, thread locked, or layout changed",
       auth: authInfo(),
     };
   }
@@ -174,18 +177,21 @@ export async function replyToThread({
   body.set("content_type", "post");
   body.set("thread_id", reply.thread_id);
 
+  const action = resolveHotCopperUrl(reply.action);
+
   if (dry_run) {
     return {
       ok: true,
       dry_run: true,
-      would_post_to: reply.action,
+      would_post_to: action,
       thread_id: reply.thread_id,
-      message_html,
-      fields: Object.fromEntries(body.entries()),
+      message_preview: message.slice(0, 500),
+      // Do not echo CSRF tokens or full form fields into MCP logs
+      field_names: [...body.keys()],
     };
   }
 
-  const res = await hcFetch(reply.action, {
+  const res = await hcFetch(action, {
     method: "POST",
     body,
     headers: {
@@ -194,13 +200,12 @@ export async function replyToThread({
     },
   });
 
-  // Success usually redirects back to thread with new post
+  // Prefer URL-based success; avoid matching arbitrary HTML containing "message"
   const success =
     res.ok &&
     (res.url.includes("/threads/") ||
-      res.text.includes("message") ||
-      res.status === 303 ||
-      res.status === 302);
+      res.url.includes("/posts/") ||
+      res.status === 200);
 
   return {
     ok: success,
@@ -210,7 +215,8 @@ export async function replyToThread({
     note: success
       ? "Reply submitted. Verify on HotCopper."
       : "Post may have failed — check status and final_url",
-    preview: res.text.slice(0, 500),
+    // Avoid dumping HTML that may include tokens/session UI
+    response_snippet: res.text.replace(/\s+/g, " ").slice(0, 200),
   };
 }
 

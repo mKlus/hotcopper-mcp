@@ -3,7 +3,13 @@ auth/*
 !auth/.gitkeep
 captures/
 *.har
+*.jsonl
 .DS_Store
 .env
 .env.*
 *.log
+# Never commit local Playwright/session dumps if created outside auth/
+storage-state.json
+cookies.json
+**/storage-state.json
+**/cookies.json
